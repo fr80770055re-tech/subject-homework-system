@@ -1,0 +1,902 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>科任作業登記</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;900&display=swap" rel="stylesheet">
+
+    <style>
+        :root {
+            --zoom: 1;
+
+            /* 色彩：與導師版相同的米色紙感＋赤陶色 */
+            --paper: #ede6d9;
+            --surface: #fbf8f2;
+            --surface-2: #f4eee3;
+            --surface-3: #e9e1d2;
+            --line: #ddd3c2;
+            --line-strong: #c9bca6;
+            --ink: #37322b;
+            --ink-2: #5f574b;
+            --ink-3: #776e60;
+            --header: #433d36;
+            --header-ink: #f6f1e8;
+            --accent: #b4572f;
+            --accent-hover: #9a4625;
+            --accent-soft: #f6e2d6;
+            --accent-ink: #6e3015;
+            --focus: #2f6f9f;
+
+            /* 狀態色：沿用導師版（未交灰、待訂橘、批改中紫、完成藍） */
+            --st-missing-bg: #aab3bf;  --st-missing-ink: #1f2731; --st-missing-line: #8e98a6;
+            --st-fix-bg: #eba57d;      --st-fix-ink: #5f2a0c;     --st-fix-line: #d88a5c;
+            --st-grading-bg: #dcc4e7;  --st-grading-ink: #4d2c5f; --st-grading-line: #b48fc6;
+            --st-done-bg: #dbe7f2;     --st-done-ink: #3a5878;    --st-done-line: #dbe7f2;
+            --st-present-bg: #d9eee1;  --st-present-ink: #2b593f;
+        }
+
+        html { background: var(--paper); }
+        body { height: 100vh; height: 100dvh; overflow: hidden; display: flex; flex-direction: column; font-family: 'Nunito', 'PingFang TC', 'Noto Sans TC', sans-serif; -webkit-font-smoothing: antialiased; background: var(--paper); color: var(--ink); letter-spacing: 0.02em; }
+        ::selection { background: var(--accent-soft); color: var(--ink); }
+        input, textarea, select { caret-color: var(--accent); }
+        :focus { outline: none; }
+        :focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; border-radius: 10px; }
+        .tnum { font-variant-numeric: tabular-nums; }
+        .ic { width: 1.15em; height: 1.15em; flex-shrink: 0; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+        .glass-panel { background: var(--surface); border: 0; box-shadow: 0 2px 4px rgba(55, 45, 30, 0.08), 0 20px 40px -12px rgba(40, 30, 18, 0.35); }
+        .glass-header { background: var(--header); }
+
+        ::-webkit-scrollbar { width: 14px; height: 14px; }
+        ::-webkit-scrollbar-track { background: var(--surface-2); }
+        ::-webkit-scrollbar-thumb { background: var(--line-strong); border-radius: 10px; border: 3px solid var(--surface-2); }
+        ::-webkit-scrollbar-thumb:hover { background: #a8987e; }
+        ::-webkit-scrollbar-corner { background: var(--surface-2); }
+
+        .main-container { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; width: 100%; background: var(--surface); border: 1px solid var(--line); box-shadow: 0 2px 6px -2px rgba(55, 45, 30, 0.12); }
+        .main-container.hidden, .setup-panel.hidden, .notice-bar.hidden { display: none; }
+        .scroll-section { flex: 1; min-height: 0; overflow: auto; background: var(--surface); }
+
+        /* 按鈕 */
+        .btn { display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem; height: 2.5rem; padding: 0 0.9rem; border-radius: 0.75rem; font-weight: 800; font-size: 0.9rem; white-space: nowrap; border: 1px solid transparent; transition: background-color 0.15s, border-color 0.15s, color 0.15s, transform 0.1s; cursor: pointer; }
+        .btn:active { transform: translateY(1px); }
+        .btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+        .btn-quiet { background: var(--surface); color: var(--ink-2); border-color: var(--line); }
+        .btn-quiet:hover:not(:disabled) { background: #fff; border-color: var(--line-strong); color: var(--ink); }
+        .btn-accent { background: var(--accent); color: #fff; }
+        .btn-accent:hover:not(:disabled) { background: var(--accent-hover); }
+        .btn-dark { background: var(--ink); color: #fff; }
+        .btn-dark:hover:not(:disabled) { background: #221e19; }
+        .btn-on-dark { background: rgba(255,255,255,0.08); color: var(--header-ink); border-color: rgba(255,255,255,0.16); }
+        .btn-on-dark:hover { background: rgba(255,255,255,0.16); }
+        .btn-toggled { background: var(--accent-soft); color: var(--accent-hover); border-color: #e7bfa8; }
+        .btn-toggled:hover { background: #f1d3c1; }
+        .btn.hidden { display: none; }
+        .btn-icon { width: 2.5rem; padding: 0; }
+        .btn-sm { height: 2rem; padding: 0 0.6rem; font-size: 0.8rem; border-radius: 0.6rem; }
+        .btn-sm.btn-icon { width: 2rem; }
+        .btn-danger-quiet { background: transparent; color: var(--ink-3); border-color: var(--line); }
+        .btn-danger-quiet:hover { background: #f7e0d8; color: #9b3f22; border-color: #e8b9a8; }
+
+        .field { display: inline-flex; align-items: center; gap: 0.45rem; height: 2.5rem; padding: 0 0.75rem; background: var(--surface); border: 1px solid var(--line); border-radius: 0.75rem; color: var(--ink-2); font-weight: 800; font-size: 0.9rem; }
+        .field:focus-within { border-color: var(--focus); box-shadow: 0 0 0 3px rgba(47,111,159,0.18); }
+        .field input, .field select { background: transparent; outline: none; color: var(--ink); font-weight: 800; }
+        .field-label { font-size: 0.78rem; color: var(--ink-3); font-weight: 800; }
+        .toolbar-divider { width: 1px; height: 1.75rem; background: var(--line); margin: 0 0.25rem; }
+        input[type="range"] { accent-color: var(--accent); }
+        input[type="number"] { -moz-appearance: textfield; } input[type="number"]::-webkit-inner-spin-button, input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+
+        /* 人數加減器 */
+        .stepper { padding: 0 0.25rem; gap: 0.15rem; }
+        .stepper button { width: 2rem; height: 2rem; border-radius: 0.55rem; display: inline-flex; align-items: center; justify-content: center; color: var(--ink-2); transition: background-color 0.15s; }
+        .stepper button:hover { background: var(--surface-3); color: var(--ink); }
+        .stepper input { width: 2.4rem; text-align: center; font-size: 0.95rem; }
+
+        /* ===== 選班畫面 ===== */
+        .picker-wrap { flex: 1; min-height: 0; overflow-y: auto; }
+        .picker-inner { width: 100%; max-width: 64rem; margin: 0 auto; padding: 2.5rem 1.25rem 3rem; }
+        .picker-title { font-size: clamp(1.9rem, 4vw, 2.6rem); font-weight: 900; line-height: 1.15; color: var(--ink); text-wrap: balance; }
+        .class-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; }
+        @media (max-width: 720px) { .class-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.75rem; } }
+        .class-tile { position: relative; text-align: left; background: var(--surface); border: 1px solid var(--line); border-radius: 1.25rem; padding: 1.2rem 1.3rem 1.1rem; min-height: 11.5rem; display: flex; flex-direction: column; gap: 0.55rem; box-shadow: 0 1px 2px rgba(55,45,30,0.06); transition: transform 0.2s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.2s, border-color 0.15s; cursor: pointer; }
+        .class-tile:hover { transform: translateY(-3px); border-color: var(--line-strong); box-shadow: 0 12px 24px -12px rgba(55,45,30,0.4); }
+        .class-tile:active { transform: scale(0.98); box-shadow: none; transition-duration: 0.06s; }
+        .class-tile:focus-visible { border-radius: 1.25rem; }
+        .class-tile.is-last { border-color: var(--accent); }
+        .tile-name { font-size: clamp(2.3rem, 5.5vw, 3.4rem); font-weight: 900; line-height: 1; letter-spacing: 0.06em; color: var(--ink); }
+        .class-tile.is-new .tile-name { color: var(--ink-3); }
+        .tile-tag { position: absolute; top: 1rem; right: 1rem; font-size: 0.72rem; font-weight: 900; color: var(--accent-hover); background: var(--accent-soft); padding: 0.2rem 0.55rem; border-radius: 999px; }
+        .tile-latest { font-size: 0.88rem; font-weight: 800; color: var(--ink-2); line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; word-break: break-all; }
+        .tile-latest small { color: var(--ink-3); font-weight: 700; font-size: 0.78rem; margin-left: 0.35rem; white-space: nowrap; display: inline-block; }
+        .tile-foot { margin-top: auto; display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; flex-wrap: wrap; padding-top: 0.6rem; border-top: 1px solid var(--line); }
+        .tile-meta { font-size: 0.82rem; font-weight: 800; color: var(--ink-3); }
+        @media (max-width: 720px) { .class-tile { min-height: 10rem; padding: 1rem 1rem 0.95rem; } .tile-tag { top: 0.8rem; right: 0.8rem; } }
+
+        /* 頂端班級切換 */
+        .class-switch { display: flex; gap: 2px; background: rgba(255,255,255,0.07); padding: 3px; border-radius: 0.85rem; border: 1px solid rgba(255,255,255,0.14); overflow-x: auto; }
+        .class-switch button { flex: 1 0 auto; position: relative; height: 2.1rem; padding: 0 0.75rem; border-radius: 0.6rem; font-weight: 900; font-size: 0.92rem; color: #d9d1c3; white-space: nowrap; transition: background-color 0.15s, color 0.15s; }
+        .class-switch button:hover { background: rgba(255,255,255,0.1); color: var(--header-ink); }
+        .class-switch button.is-active { background: var(--header-ink); color: var(--header); }
+
+        /* 備份提醒條 */
+        .notice-bar { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; background: var(--accent-soft); color: var(--accent-ink); border: 1px solid #e7bfa8; border-radius: 1rem; padding: 0.55rem 0.6rem 0.55rem 1rem; font-weight: 800; font-size: 0.9rem; margin-bottom: 0.6rem; }
+        .notice-bar.is-danger { background: #f7e0d8; border-color: #e8b9a8; color: #7a2a1d; }
+        @media (max-width: 639px) { .notice-bar { margin: 0.5rem 0.5rem 0.5rem; } }
+
+        /* 存檔狀態 */
+        .save-dot { width: 0.5rem; height: 0.5rem; border-radius: 999px; background: #5fbf86; transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1); }
+        .is-flash .save-dot { transform: scale(1.8); }
+
+        /* 首次設定人數 */
+        .setup-panel { flex: 1; min-height: 0; overflow-y: auto; display: flex; align-items: center; justify-content: center; padding: 2rem 1.25rem; background: var(--surface); }
+        .setup-stepper { display: flex; align-items: center; gap: 0.75rem; }
+        .setup-stepper button { width: 3.5rem; height: 3.5rem; border-radius: 1rem; border: 1px solid var(--line); background: var(--surface-2); color: var(--ink-2); display: inline-flex; align-items: center; justify-content: center; font-size: 1.4rem; transition: background-color 0.15s; }
+        .setup-stepper button:hover { background: #fff; color: var(--ink); }
+        .setup-stepper input { width: 6.5rem; height: 4.5rem; text-align: center; font-size: 2.8rem; font-weight: 900; border: 1px solid var(--line); border-radius: 1rem; background: #fff; color: var(--ink); }
+        .setup-stepper input:focus { border-color: var(--focus); box-shadow: 0 0 0 3px rgba(47,111,159,0.18); }
+
+        /* 分頁 */
+        .tab-row { display: flex; align-items: flex-end; gap: 0.25rem; padding: 0.5rem 0.75rem 0; background: var(--surface-2); border-bottom: 1px solid var(--line); overflow-x: auto; }
+        .tab-btn { display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.7rem 1.15rem 0.8rem; font-weight: 900; font-size: 1.02em; transition: color 0.15s, background-color 0.15s; border-radius: 0.8rem 0.8rem 0 0; white-space: nowrap; position: relative; border: 1px solid transparent; border-bottom: 0; margin-bottom: -1px; }
+        .tab-active { background-color: var(--surface); color: var(--ink); border-color: var(--line); }
+        .tab-active::before { content: ""; position: absolute; left: 0.9rem; right: 0.9rem; top: 0; height: 3px; border-radius: 0 0 3px 3px; background: var(--accent); }
+        .tab-inactive { color: var(--ink-3); }
+        .tab-inactive:hover { color: var(--ink); background: rgba(255,255,255,0.5); }
+
+        /* 狀態按鈕 */
+        .state-btn { position: relative; width: 100%; min-width: calc(70px * var(--zoom)); height: calc(58px * var(--zoom)); border-radius: calc(14px * var(--zoom)); font-weight: 900; font-size: calc(1em * var(--zoom)); display: flex; align-items: center; justify-content: center; cursor: pointer; border: 2px solid transparent; transition: transform 0.12s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.15s, background-color 0.15s; -webkit-tap-highlight-color: transparent; }
+        .state-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 12px -4px rgba(55,45,30,0.25); }
+        .state-btn:active { transform: scale(0.94); box-shadow: none; transition-duration: 0.05s; }
+        .btn-idx { position: absolute; top: calc(4px * var(--zoom)); left: calc(7px * var(--zoom)); font-size: 0.7em; font-weight: 800; line-height: 1; opacity: 0.75; font-variant-numeric: tabular-nums; }
+        .btn-text { font-size: 1.12em; font-weight: 900; line-height: 1; white-space: nowrap; margin-top: calc(8px * var(--zoom)); }
+
+        .task-0 { background: var(--st-missing-bg); color: var(--st-missing-ink); border-color: var(--st-missing-line); }
+        .task-1 { background: var(--st-fix-bg); color: var(--st-fix-ink); border-color: var(--st-fix-line); }
+        .task-3 { background: var(--st-grading-bg); color: var(--st-grading-ink); border-color: var(--st-grading-line); border-style: dashed; }
+        .task-2 { background: var(--st-done-bg); color: var(--st-done-ink); border-color: var(--st-done-line); }
+
+        .att-0 { background: var(--st-present-bg); color: var(--st-present-ink); border-color: var(--st-present-bg); }
+        .att-1 { background: #f4dc9c; color: #614a0c; border-color: #dfc278; }
+        .att-2 { background: #efc3b9; color: #7a2a1d; border-color: #dda193; }
+        .att-3 { background: #cfe0f1; color: #234a6e; border-color: #a9c5e0; }
+        .att-4 { background: #d9dcdf; color: #3c434a; border-color: #bec3c8; }
+        .att-5 { background: #e2d6f0; color: #4a3366; border-color: #c6b2de; }
+
+        /* 表格 */
+        table { border-collapse: separate; border-spacing: 0; }
+        th { background: var(--surface-2); font-weight: 900; color: var(--ink-2); border-bottom: 1px solid var(--line); padding: 10px 4px; white-space: nowrap; }
+        td { border-color: var(--line) !important; }
+        .student-th { min-width: calc(78px * var(--zoom)); font-size: calc(1.1rem * var(--zoom)); padding-left: calc(0.25rem * var(--zoom)); padding-right: calc(0.25rem * var(--zoom)); font-variant-numeric: tabular-nums; }
+        th.sticky-top { position: sticky; top: 0; z-index: 20; text-align: center; }
+        .sticky-left { position: sticky; left: 0; z-index: 20; background: var(--surface); border-right: 1px solid var(--line); transition: background-color 0.15s; }
+        th.sticky-cross { position: sticky; top: 0; left: 0; z-index: 30; background: var(--surface-3); border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+        .task-name-cell { min-width: calc(210px * var(--zoom)); max-width: calc(260px * var(--zoom)); }
+        .drag-handle { cursor: grab; color: var(--line-strong); transition: color 0.15s; padding: 2px; border-radius: 6px; display: inline-flex; }
+        .drag-handle:hover { color: var(--accent); }
+        .drag-handle:active { cursor: grabbing; }
+        .sortable-ghost { opacity: 0.45; }
+        tbody tr { transition: background-color 0.15s; }
+        tbody tr:hover td { background-color: #f7f2e9; }
+        tbody tr:hover td.sticky-left { background-color: var(--surface-2); }
+
+        /* 總覽面板 */
+        .report-section { border-top: 1px solid var(--line); background: var(--surface-2); padding: 0 16px 14px; flex-shrink: 0; transition: height 0.25s cubic-bezier(0.22, 1, 0.36, 1); display: flex; flex-direction: column; position: relative; }
+        .report-open { height: clamp(170px, 28%, 310px); }
+        .report-closed { height: 38px; overflow: hidden; padding-bottom: 0; }
+        .report-card { background: var(--surface); border: 1px solid var(--line); border-radius: 1rem; padding: 0.9rem 1rem; display: flex; flex-direction: column; min-height: 0; }
+        .report-title { display: flex; align-items: center; gap: 0.45rem; color: var(--ink); font-size: 0.95rem; font-weight: 900; margin-bottom: 0.5rem; }
+        .report-item { padding: 0.55rem 0; border-bottom: 1px solid var(--line); }
+        .report-item:last-child { border-bottom: 0; }
+        .report-row { display: flex; align-items: baseline; gap: 0.5rem; margin-top: 0.3rem; font-size: 0.9rem; }
+        .chip { display: inline-flex; align-items: center; gap: 0.25rem; padding: 0.1rem 0.5rem; border-radius: 999px; font-size: 0.75rem; font-weight: 900; white-space: nowrap; flex-shrink: 0; }
+        .chip-missing { background: var(--st-missing-bg); color: var(--st-missing-ink); }
+        .chip-fix { background: var(--st-fix-bg); color: var(--st-fix-ink); }
+        .chip-grading { background: var(--st-grading-bg); color: var(--st-grading-ink); border: 1px dashed var(--st-grading-line); }
+        .chip-done { background: var(--st-done-bg); color: var(--st-done-ink); }
+        .chip-muted { background: var(--surface-2); color: var(--ink-3); border: 1px solid var(--line); }
+
+        @media (max-height: 500px) and (orientation: landscape) { .control-bar { padding-top: 6px; padding-bottom: 6px; } .tab-btn { padding: 6px 12px; font-size: 0.9rem; } }
+        @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; } }
+
+        /* 列印缺交檢核表：A4 直式、每頁 2×2 四位學生 */
+        #printArea { display: none; }
+        @page { size: A4 portrait; margin: 8mm; }
+        @media print {
+            html, body { height: auto !important; overflow: visible !important; display: block !important; background: #fff !important; padding: 0 !important; }
+            body > *:not(#printArea) { display: none !important; }
+            #printArea { display: block; color: #111; font-family: 'Nunito', 'PingFang TC', 'Noto Sans TC', sans-serif; letter-spacing: 0.02em; }
+        }
+        .print-page { width: 194mm; height: 280mm; display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; break-after: page; page-break-after: always; overflow: hidden; }
+        .print-page:last-child { break-after: auto; page-break-after: auto; }
+        .print-card { padding: 7mm 7mm 6mm; display: flex; flex-direction: column; overflow: hidden; border-color: #9a9a9a; border-style: dashed; border-width: 0; }
+        .print-card:nth-child(1) { border-right-width: 1px; border-bottom-width: 1px; }
+        .print-card:nth-child(2) { border-bottom-width: 1px; }
+        .print-card:nth-child(3) { border-right-width: 1px; }
+        .print-card-head { display: flex; align-items: baseline; justify-content: space-between; gap: 4mm; border-bottom: 1.5px solid #111; padding-bottom: 2.5mm; margin-bottom: 3mm; }
+        .print-seat { font-size: 22pt; font-weight: 900; line-height: 1; font-variant-numeric: tabular-nums; white-space: nowrap; }
+        .print-seat small { font-size: 11pt; font-weight: 800; margin-left: 1.5mm; }
+        .print-title { font-size: 12pt; font-weight: 900; text-align: right; }
+        .print-meta { font-size: 8.5pt; color: #555; font-weight: 700; text-align: right; font-variant-numeric: tabular-nums; }
+        .print-list-head { display: flex; gap: 3mm; font-size: 8pt; color: #555; font-weight: 800; padding: 0 0 1.5mm; border-bottom: 1px solid #ccc; white-space: nowrap; }
+        .print-list-head .col-check { width: 8mm; text-align: center; flex-shrink: 0; }
+        .print-list { flex: 1; min-height: 0; overflow: hidden; }
+        .print-item { display: flex; align-items: center; gap: 3mm; padding: 2mm 0; border-bottom: 1px solid #ddd; font-size: 11pt; font-weight: 800; break-inside: avoid; }
+        .print-box { width: 5.5mm; height: 5.5mm; margin: 0 1.25mm; border: 1.5px solid #111; border-radius: 1mm; flex-shrink: 0; }
+        .print-name { flex: 1; min-width: 0; line-height: 1.25; word-break: break-all; }
+        .print-date { font-size: 8.5pt; color: #555; font-weight: 700; flex-shrink: 0; font-variant-numeric: tabular-nums; }
+        .print-status { font-size: 8pt; font-weight: 900; border: 1px solid #111; border-radius: 1mm; padding: 0.3mm 1.5mm; flex-shrink: 0; }
+        .print-status.is-fix { border-style: dashed; }
+        .print-list.is-dense .print-item { padding: 1.2mm 0; font-size: 9.5pt; }
+        .print-list.is-dense .print-box { width: 4.5mm; height: 4.5mm; margin: 0 1.75mm; }
+        .print-list.is-two-col { column-count: 2; column-gap: 4mm; column-fill: auto; }
+        .print-list.is-two-col .print-item { gap: 1.5mm; }
+        .print-list.is-two-col .print-box { margin: 0; }
+        .print-list.is-two-col .print-date { display: none; }
+        .print-list.is-two-col .print-name { word-break: normal; overflow-wrap: anywhere; }
+        .print-list.is-tiny .print-item { padding: 0.7mm 0; font-size: 8.5pt; }
+        .print-list.is-tiny .print-box { width: 3.8mm; height: 3.8mm; }
+        .print-list.is-tiny .print-status { font-size: 7pt; padding: 0 1mm; }
+        .print-foot { margin-top: auto; padding-top: 2mm; font-size: 8.5pt; color: #555; font-weight: 700; }
+    </style>
+</head>
+<body class="p-0 sm:p-3 relative">
+
+    <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+        <symbol id="i-download" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/></symbol>
+        <symbol id="i-upload" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m17 8-5-5-5 5"/><path d="M12 3v12"/></symbol>
+        <symbol id="i-printer" viewBox="0 0 24 24"><path d="M6 9V3h12v6"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect width="12" height="8" x="6" y="14" rx="1"/></symbol>
+        <symbol id="i-note" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></symbol>
+        <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></symbol>
+        <symbol id="i-eye-off" viewBox="0 0 24 24"><path d="M9.9 9.9a3 3 0 1 0 4.2 4.2"/><path d="M10.7 5.1A10.4 10.4 0 0 1 12 5c7 0 10 7 10 7a13.2 13.2 0 0 1-1.7 2.7"/><path d="M6.6 6.6A13.5 13.5 0 0 0 2 12s3 7 10 7a9.7 9.7 0 0 0 5.4-1.6"/><path d="M2 2l20 20"/></symbol>
+        <symbol id="i-send" viewBox="0 0 24 24"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></symbol>
+        <symbol id="i-calendar" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></symbol>
+        <symbol id="i-calendar-check" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/><path d="m9 16 2 2 4-4"/></symbol>
+        <symbol id="i-users" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.9"/><path d="M16 3.1a4 4 0 0 1 0 7.8"/></symbol>
+        <symbol id="i-zoom" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7.5"/><path d="m21 21-4.6-4.6"/><path d="M11 8v6M8 11h6"/></symbol>
+        <symbol id="i-plus" viewBox="0 0 24 24"><path d="M5 12h14M12 5v14"/></symbol>
+        <symbol id="i-minus" viewBox="0 0 24 24"><path d="M5 12h14"/></symbol>
+        <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+        <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+        <symbol id="i-grip" viewBox="0 0 24 24"><circle cx="9" cy="6" r="1.2" fill="currentColor"/><circle cx="9" cy="12" r="1.2" fill="currentColor"/><circle cx="9" cy="18" r="1.2" fill="currentColor"/><circle cx="15" cy="6" r="1.2" fill="currentColor"/><circle cx="15" cy="12" r="1.2" fill="currentColor"/><circle cx="15" cy="18" r="1.2" fill="currentColor"/></symbol>
+        <symbol id="i-list" viewBox="0 0 24 24"><rect width="8" height="4" x="8" y="2" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M12 11h4M12 16h4M8 11h.01M8 16h.01"/></symbol>
+        <symbol id="i-chevron-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+        <symbol id="i-chevron-left" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></symbol>
+        <symbol id="i-grid" viewBox="0 0 24 24"><rect width="7" height="7" x="3" y="3" rx="1.5"/><rect width="7" height="7" x="14" y="3" rx="1.5"/><rect width="7" height="7" x="3" y="14" rx="1.5"/><rect width="7" height="7" x="14" y="14" rx="1.5"/></symbol>
+        <symbol id="i-copy" viewBox="0 0 24 24"><rect width="14" height="14" x="8" y="8" rx="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></symbol>
+        <symbol id="i-message" viewBox="0 0 24 24"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/></symbol>
+        <symbol id="i-pencil" viewBox="0 0 24 24"><path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></symbol>
+        <symbol id="i-hdd" viewBox="0 0 24 24"><path d="M22 12H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11Z"/><path d="M6 16h.01M10 16h.01"/></symbol>
+        <symbol id="i-alert" viewBox="0 0 24 24"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4M12 17h.01"/></symbol>
+        <symbol id="i-sheet" viewBox="0 0 24 24"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5Z"/><path d="M14 2v6h6"/><path d="M8 13h8M8 17h8M12 13v8"/></symbol>
+    </svg>
+
+    <!-- 備份／儲存提醒（兩個畫面共用） -->
+    <div id="noticeBar" class="notice-bar hidden" role="status">
+        <svg class="ic"><use href="#i-alert"/></svg>
+        <span id="noticeText" class="flex-1 min-w-[12rem] leading-snug"></span>
+        <button id="noticeAction" onclick="downloadBackup()" class="btn btn-accent btn-sm !h-9"><svg class="ic"><use href="#i-download"/></svg>立即下載備份</button>
+    </div>
+
+    <!-- ===== 選班畫面 ===== -->
+    <div id="pickerScreen" class="main-container sm:rounded-[1.5rem]">
+        <div class="px-4 sm:px-5 py-2.5 glass-header text-[var(--header-ink)] flex flex-wrap gap-2 justify-between items-center shrink-0 sm:rounded-t-[1.5rem]">
+            <div class="flex items-center gap-3 min-w-0">
+                <h1 class="font-black text-lg md:text-xl tracking-wide">科任作業登記</h1>
+                <span class="save-indicator flex items-center gap-1.5 text-[11px] font-bold text-[#a9d8b8]"><span class="save-dot"></span><span class="save-text">存在這台電腦</span></span>
+            </div>
+            <div class="flex items-center gap-2">
+                <button onclick="downloadBackup()" class="btn btn-on-dark btn-sm sm:!h-9 sm:!text-sm"><svg class="ic"><use href="#i-download"/></svg>下載備份</button>
+                <button onclick="pickRestoreFile()" class="btn btn-on-dark btn-sm sm:!h-9 sm:!text-sm"><svg class="ic"><use href="#i-upload"/></svg>從備份還原</button>
+            </div>
+        </div>
+        <div class="picker-wrap">
+            <div class="picker-inner">
+                <div class="flex flex-wrap items-end justify-between gap-4 mb-7">
+                    <div>
+                        <h2 class="picker-title">要登記哪一班？</h2>
+                        <p class="mt-2 text-[var(--ink-3)] font-bold">不需登入，資料只存在這台電腦的瀏覽器裡。</p>
+                    </div>
+                    <label class="field !h-11" title="寫給家長的提醒訊息會帶入這個科目">
+                        <span class="field-label shrink-0">任教科目</span>
+                        <input type="text" id="subjectInput" maxlength="10" placeholder="例如：自然" class="w-28 text-sm placeholder:text-[var(--ink-3)] placeholder:font-bold" oninput="updateSubject(this.value)">
+                    </label>
+                </div>
+                <div id="classGrid" class="class-grid"></div>
+                <p id="backupStatusLine" class="mt-6 text-sm font-bold text-[var(--ink-3)] flex items-center gap-2"><svg class="ic"><use href="#i-hdd"/></svg><span></span></p>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===== 班級畫面 ===== -->
+    <div id="classScreen" class="main-container hidden sm:rounded-[1.5rem]">
+        <div class="px-3 sm:px-4 py-2.5 glass-header text-[var(--header-ink)] flex flex-wrap gap-x-3 gap-y-2 justify-between items-center shrink-0 sm:rounded-t-[1.5rem]">
+            <div class="flex items-center gap-2.5 min-w-0">
+                <button onclick="goHome()" class="btn btn-on-dark btn-sm sm:!h-9" aria-label="回到全部班級"><svg class="ic"><use href="#i-grid"/></svg><span class="hidden sm:inline">全部班級</span></button>
+                <h1 class="font-black text-2xl md:text-3xl tracking-wider leading-none flex items-baseline gap-2"><span id="classTitle">一忠</span><span id="subjectTag" class="text-sm font-black text-[#d9d1c3] tracking-normal"></span></h1>
+            </div>
+            <nav id="classSwitch" class="class-switch max-sm:order-last max-sm:w-full sm:mr-auto" aria-label="切換班級"></nav>
+            <div class="flex items-center gap-2">
+                <span class="save-indicator hidden md:flex items-center gap-1.5 text-[11px] font-bold text-[#a9d8b8] mr-1"><span class="save-dot"></span><span class="save-text">存在這台電腦</span></span>
+                <button onclick="downloadBackup()" class="btn btn-on-dark btn-sm sm:!h-9 sm:!text-sm" aria-label="下載備份"><svg class="ic"><use href="#i-download"/></svg><span class="hidden lg:inline">下載備份</span></button>
+                <button onclick="exportExcel()" id="btnExport" class="btn btn-on-dark btn-sm sm:!h-9 sm:!text-sm max-sm:hidden"><svg class="ic"><use href="#i-sheet"/></svg>匯出本班</button>
+            </div>
+        </div>
+
+        <!-- 首次進入：先設定人數 -->
+        <div id="setupPanel" class="setup-panel hidden">
+            <div class="w-full max-w-md text-center">
+                <h2 class="text-3xl md:text-4xl font-black text-[var(--ink)] leading-tight"><span id="setupClassName"></span>有幾位學生？</h2>
+                <p class="mt-3 text-[var(--ink-3)] font-bold">設定好人數就能開始建立作業，之後隨時可以在上方調整。</p>
+                <div class="setup-stepper justify-center mt-8">
+                    <button onclick="stepSetupCount(-1)" aria-label="減少一人"><svg class="ic"><use href="#i-minus"/></svg></button>
+                    <input type="number" id="setupCount" value="25" min="1" max="60" inputmode="numeric" class="tnum" aria-label="學生人數" onkeydown="if(event.key==='Enter') confirmSetup()">
+                    <button onclick="stepSetupCount(1)" aria-label="增加一人"><svg class="ic"><use href="#i-plus"/></svg></button>
+                </div>
+                <button onclick="confirmSetup()" class="btn btn-accent w-full !h-14 !text-lg !rounded-2xl mt-8">開始登記</button>
+            </div>
+        </div>
+
+        <div id="classWork" class="flex flex-col flex-1 min-h-0">
+            <div class="control-bar px-3 sm:px-4 py-2.5 flex flex-wrap items-center justify-between gap-2.5 bg-[var(--surface)] shrink-0 border-b border-[var(--line)]">
+                <div class="flex flex-wrap items-center gap-2">
+                    <label class="field" title="切換日期（出缺勤、記事依日期記錄；新作業以此日期為指派日）">
+                        <svg class="ic text-[var(--ink-3)]"><use href="#i-calendar"/></svg>
+                        <input type="date" id="currentDate" class="text-sm tnum" onchange="renderClass()">
+                    </label>
+                    <div class="field stepper" title="本班人數">
+                        <button onclick="stepCount(-1)" aria-label="減少一人"><svg class="ic"><use href="#i-minus"/></svg></button>
+                        <input type="number" id="studentCount" min="1" max="60" inputmode="numeric" class="tnum" aria-label="本班人數" onchange="setCount(this.value)">
+                        <span class="field-label -ml-1">人</span>
+                        <button onclick="stepCount(1)" aria-label="增加一人"><svg class="ic"><use href="#i-plus"/></svg></button>
+                    </div>
+                    <label class="field max-sm:hidden" title="縮放表格大小">
+                        <svg class="ic text-[var(--ink-3)]"><use href="#i-zoom"/></svg>
+                        <input type="range" id="uiZoom" min="0.5" max="1.1" step="0.05" value="1" oninput="changeZoom(this.value)" class="w-16 md:w-24" aria-label="縮放表格大小">
+                    </label>
+
+                    <span class="toolbar-divider hidden md:block"></span>
+
+                    <button onclick="openNoteModal()" class="btn btn-quiet"><svg class="ic"><use href="#i-note"/></svg>記事</button>
+                    <button onclick="openReminderModal()" id="btnReminder" class="btn btn-quiet"><svg class="ic"><use href="#i-send"/></svg>繳交提醒</button>
+                    <button onclick="openPrintModal()" id="btnPrintChecklist" class="btn btn-quiet"><svg class="ic"><use href="#i-printer"/></svg>列印缺交單</button>
+                </div>
+
+                <div id="addTaskGroup" class="flex gap-2 w-full sm:w-auto">
+                    <label class="field flex-1 sm:w-56 sm:flex-none">
+                        <input type="text" id="itemName" placeholder="新增作業名稱..." class="w-full text-sm placeholder:text-[var(--ink-3)] placeholder:font-bold" onkeydown="if(event.key==='Enter' && !event.isComposing) addTask()">
+                    </label>
+                    <button onclick="addTask()" class="btn btn-dark"><svg class="ic"><use href="#i-plus"/></svg>新增</button>
+                </div>
+            </div>
+
+            <div class="tab-row shrink-0">
+                <button id="btnTaskTab" onclick="switchTab('task')" class="tab-btn tab-active"><svg class="ic"><use href="#i-list"/></svg>作業進度</button>
+                <button id="btnAttTab" onclick="switchTab('att')" class="tab-btn tab-inactive"><svg class="ic"><use href="#i-calendar-check"/></svg>出缺勤</button>
+                <div class="ml-auto flex items-center gap-2 pb-2 pl-3 shrink-0">
+                    <div id="taskLegend" class="hidden lg:flex items-center gap-1.5 mr-1 text-xs">
+                        <span class="chip chip-missing">未交</span><span class="chip chip-grading">批改中</span><span class="chip chip-fix">待訂</span><span class="chip chip-done">完成</span>
+                    </div>
+                    <button onclick="showAllHiddenTaskStudents()" id="btnShowHiddenStudents" class="hidden btn btn-toggled btn-sm"><svg class="ic"><use href="#i-eye"/></svg>已隱藏 <span id="hiddenStudentCount" class="tnum">0</span> 位・還原</button>
+                    <button onclick="toggleHidePerfect()" id="btnHidePerfect" class="btn btn-quiet btn-sm" aria-pressed="false"><svg class="ic"><use href="#i-eye-off"/></svg><span id="btnHidePerfectText">隱藏全過關</span></button>
+                </div>
+            </div>
+
+            <div id="taskView" class="scroll-section"><table class="w-full"><thead id="taskHeader"></thead><tbody id="taskBody"></tbody></table></div>
+            <div id="attView" class="scroll-section hidden"><table class="w-full"><thead id="attHeader"></thead><tbody id="attendanceBody"></tbody></table></div>
+
+            <div id="reportPanel" class="report-section sm:rounded-b-[1.5rem] report-open">
+                <div class="flex justify-center shrink-0">
+                    <button onclick="toggleReport()" class="flex items-center gap-1.5 px-4 h-[37px] text-xs font-black text-[var(--ink-3)] hover:text-[var(--ink)] transition"><span id="reportToggleIcon" class="inline-flex transition-transform"><svg class="ic"><use href="#i-chevron-down"/></svg></span><span id="reportToggleText">收起總覽面板</span></button>
+                </div>
+                <div id="reportGrid" class="grid grid-cols-1 md:grid-cols-[1.6fr_1fr] gap-3 flex-1 min-h-0 overflow-hidden transition-opacity duration-200">
+                    <div class="report-card">
+                        <div class="report-title">未完成作業</div>
+                        <div id="taskReport" class="text-sm font-bold flex-1 overflow-y-auto text-[var(--ink)] pr-1"></div>
+                    </div>
+                    <div class="report-card">
+                        <div class="report-title">今日出缺勤異動</div>
+                        <div id="attReport" class="flex flex-wrap gap-2 text-sm text-[var(--ink)] flex-1 overflow-y-auto font-bold content-start"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <input type="file" id="restoreFileInput" accept=".json,application/json" class="hidden" onchange="handleRestoreFile(this)">
+
+    <div id="noteModal" class="modal fixed inset-0 z-50 bg-[#2a241d]/55 hidden items-center justify-center font-black">
+        <div class="glass-panel p-7 md:p-8 rounded-[1.5rem] w-11/12 max-w-3xl">
+            <div class="flex justify-between items-center mb-5">
+                <h2 class="text-2xl font-black text-[var(--ink)] flex items-center gap-2.5 flex-wrap"><svg class="ic text-[var(--accent)]"><use href="#i-note"/></svg><span id="noteClassName"></span>記事 <span id="noteDateDisplay" class="ml-1 text-sm font-black tnum bg-[var(--surface-2)] border border-[var(--line)] text-[var(--ink-2)] px-2.5 py-1 rounded-lg"></span></h2>
+                <button onclick="closeModal('noteModal')" class="btn btn-quiet btn-icon" aria-label="關閉"><svg class="ic"><use href="#i-x"/></svg></button>
+            </div>
+            <textarea id="dailyNoteText" placeholder="今天這班的上課狀況、要追蹤的學生…" class="w-full h-72 p-6 border border-[var(--line)] rounded-xl outline-none focus:border-[var(--focus)] resize-none text-xl font-bold text-[var(--ink)] bg-white leading-relaxed placeholder:text-[var(--ink-3)]"></textarea>
+            <div class="mt-5 flex justify-end"><button onclick="saveAndCloseNote()" class="btn btn-dark !h-12 !px-8 !text-base"><svg class="ic"><use href="#i-check"/></svg>儲存並關閉</button></div>
+        </div>
+    </div>
+
+    <div id="reminderModal" class="modal fixed inset-0 z-50 bg-[#2a241d]/55 hidden items-center justify-center font-black">
+        <div class="glass-panel p-7 md:p-8 rounded-[1.5rem] w-11/12 max-w-2xl flex flex-col max-h-[85vh]">
+            <div class="flex justify-between items-center mb-4 shrink-0">
+                <h2 class="text-2xl font-black text-[var(--ink)] flex items-center gap-2.5"><svg class="ic text-[var(--accent)]"><use href="#i-send"/></svg>作業繳交提醒</h2>
+                <button onclick="closeModal('reminderModal')" class="btn btn-quiet btn-icon" aria-label="關閉"><svg class="ic"><use href="#i-x"/></svg></button>
+            </div>
+            <label class="field w-full mb-4 shrink-0 !h-12">
+                <span class="field-label shrink-0">座號</span>
+                <select id="reminderStudentSelect" onchange="updateReminderPreview()" class="flex-1 bg-transparent font-black outline-none text-[var(--ink)] text-base"></select>
+            </label>
+            <div id="reminderEmptyState" class="hidden text-center text-[var(--st-done-ink)] bg-[var(--st-done-bg)] rounded-xl font-black py-16">這位同學的作業都完成了，不需要提醒。</div>
+            <textarea id="reminderTextarea" class="w-full h-64 p-5 border border-[var(--line)] rounded-xl outline-none focus:border-[var(--focus)] resize-none text-base font-bold text-[var(--ink)] bg-white leading-relaxed"></textarea>
+            <div class="mt-5 flex gap-3 shrink-0">
+                <button onclick="copyReminderText()" id="btnCopyReminder" class="btn btn-quiet flex-1 !h-12 !text-base"><svg class="ic"><use href="#i-copy"/></svg><span>複製文字</span></button>
+                <button onclick="sendReminderLine()" id="btnSendLine" class="btn flex-1 !h-12 !text-base bg-[#06C755] hover:bg-[#05a849] text-white"><svg class="ic"><use href="#i-message"/></svg>用 LINE 傳送</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="printModal" class="modal fixed inset-0 z-50 bg-[#2a241d]/55 hidden items-center justify-center font-black">
+        <div class="glass-panel p-7 md:p-8 rounded-[1.5rem] w-11/12 max-w-lg">
+            <div class="flex justify-between items-center mb-3">
+                <h2 class="text-2xl font-black text-[var(--ink)] flex items-center gap-2.5"><svg class="ic text-[var(--accent)]"><use href="#i-printer"/></svg>列印缺交檢核表</h2>
+                <button onclick="closeModal('printModal')" class="btn btn-quiet btn-icon" aria-label="關閉"><svg class="ic"><use href="#i-x"/></svg></button>
+            </div>
+            <p class="text-sm font-bold text-[var(--ink-3)] mb-5 leading-relaxed">每位學生一格，列出尚缺的作業與打勾欄。每張 A4 印四位學生，沿虛線裁開即可發給學生。</p>
+            <div class="text-sm font-black text-[var(--ink-2)] mb-2">要列入的狀態</div>
+            <div class="flex gap-2 mb-5">
+                <label class="field flex-1 cursor-pointer"><input type="checkbox" id="printIncludeMissing" checked onchange="updatePrintSummary()" class="w-4 h-4 accent-[var(--accent)]"><span class="chip chip-missing">未交</span></label>
+                <label class="field flex-1 cursor-pointer"><input type="checkbox" id="printIncludeFix" checked onchange="updatePrintSummary()" class="w-4 h-4 accent-[var(--accent)]"><span class="chip chip-fix">待訂正</span></label>
+            </div>
+            <div id="printSummary" class="text-base font-black text-[var(--ink)] bg-[var(--surface-2)] border border-[var(--line)] rounded-xl px-4 py-3 mb-6"></div>
+            <div class="flex gap-3">
+                <button onclick="closeModal('printModal')" class="btn btn-quiet flex-1 !h-12">取消</button>
+                <button onclick="runPrintChecklist()" id="btnRunPrint" class="btn btn-dark flex-1 !h-12"><svg class="ic"><use href="#i-printer"/></svg>列印</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="restoreModal" class="modal fixed inset-0 z-[97] bg-[#2a241d]/55 hidden items-center justify-center font-black">
+        <div class="glass-panel p-7 md:p-8 rounded-[1.5rem] w-11/12 max-w-lg max-h-[90vh] overflow-y-auto">
+            <div class="flex justify-between items-center mb-3">
+                <h2 class="text-2xl font-black text-[var(--ink)] flex items-center gap-2.5"><svg class="ic text-[var(--accent)]"><use href="#i-upload"/></svg>從備份還原</h2>
+                <button onclick="closeRestoreModal()" class="btn btn-quiet btn-icon" aria-label="關閉"><svg class="ic"><use href="#i-x"/></svg></button>
+            </div>
+            <p class="text-sm font-bold text-[var(--ink-3)] mb-4 leading-relaxed">請確認這是你要還原的備份。還原會以備份內容<span class="text-[var(--ink)]">取代這台電腦上六個班的所有資料</span>。</p>
+            <div class="bg-[var(--surface-2)] border border-[var(--line)] rounded-xl px-4 py-3 mb-4">
+                <div id="restoreFileName" class="text-sm font-black text-[var(--ink)] break-all mb-2"></div>
+                <dl id="restoreSummary" class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5 text-sm"></dl>
+            </div>
+            <p id="restoreSafetyNote" class="text-sm font-bold text-[var(--ink-2)] bg-[var(--st-done-bg)] rounded-xl px-4 py-3 mb-6 leading-relaxed">按下還原前，系統會先自動下載一份<span class="text-[var(--ink)]">目前的資料</span>，萬一選錯檔案也能再還原回來。</p>
+            <div class="flex gap-3">
+                <button onclick="closeRestoreModal()" class="btn btn-quiet flex-1 !h-12">取消</button>
+                <button onclick="confirmRestore()" class="btn btn-accent flex-1 !h-12"><svg class="ic"><use href="#i-upload"/></svg>確認還原</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function ic(name, cls = '') { return `<svg class="ic ${cls}" aria-hidden="true"><use href="#i-${name}"/></svg>`; }
+        function escapeHtml(str) { return String(str).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+        function $(id) { return document.getElementById(id); }
+
+        const CLASSES = ['一忠', '二忠', '三忠', '四忠', '五忠', '六忠'];
+        const APP_ID = 'subject-homework';
+        const STORE_KEY = 'subjectHomework.v1';
+        const ZOOM_KEY = 'subjectHomework.zoom';
+        const BACKUP_REMIND_DAYS = 7;
+        const MAX_STUDENTS = 60;
+        const DAY_MS = 86400000;
+        const TASK_LABELS = { 0: '未交', 1: '待訂', 2: '完成', 3: '批改中' };
+        const TASK_NEXT = { 0: 3, 3: 1, 1: 2, 2: 0 };
+        const attLabels = ['出席', '事假', '病假', '公假', '喪假', '遲到'];
+
+        // ===== 本機儲存 =====
+        // 資料結構：六個班各自一份 { studentCount, tasks:[{id,name,date}], taskData:{座號:{作業id:狀態}}, historyAtt:{日期:{座號:假別}}, dailyNotes:{日期:文字} }
+        function emptyClass() { return { studentCount: null, tasks: [], taskData: {}, historyAtt: {}, dailyNotes: {} }; }
+        function emptyState() { const classes = {}; CLASSES.forEach(c => classes[c] = emptyClass()); return { app: APP_ID, version: 1, subject: '', classes, lastClass: null, lastBackupAt: null }; }
+        const asObj = v => (v && typeof v === 'object' && !Array.isArray(v)) ? v : {};
+        function normalizeState(raw) {
+            const s = emptyState(); if (!raw || typeof raw !== 'object') return s;
+            s.subject = typeof raw.subject === 'string' ? raw.subject.slice(0, 10) : '';
+            s.lastClass = CLASSES.includes(raw.lastClass) ? raw.lastClass : null;
+            s.lastBackupAt = typeof raw.lastBackupAt === 'number' ? raw.lastBackupAt : null;
+            CLASSES.forEach(c => {
+                const r = raw.classes && raw.classes[c]; if (!r || typeof r !== 'object') return;
+                const cl = s.classes[c]; const n = parseInt(r.studentCount);
+                cl.studentCount = n > 0 ? Math.min(n, MAX_STUDENTS) : null;
+                cl.tasks = Array.isArray(r.tasks) ? r.tasks.filter(t => t && typeof t.id === 'string' && typeof t.name === 'string').map(t => ({ id: t.id, name: t.name, date: typeof t.date === 'string' ? t.date : '' })) : [];
+                cl.taskData = asObj(r.taskData); cl.historyAtt = asObj(r.historyAtt); cl.dailyNotes = asObj(r.dailyNotes);
+            });
+            return s;
+        }
+
+        let storageOk = true; let storageWriteFailed = false;
+        function loadState() {
+            try { const raw = localStorage.getItem(STORE_KEY); return normalizeState(raw ? JSON.parse(raw) : null); }
+            catch (e) { storageOk = false; return emptyState(); }
+        }
+        let state = loadState();
+
+        let saveFlashTimer = null;
+        function save() {
+            try { localStorage.setItem(STORE_KEY, JSON.stringify(state)); storageWriteFailed = false; }
+            catch (e) { storageWriteFailed = true; renderNotice(); return; }
+            document.querySelectorAll('.save-indicator').forEach(el => { el.classList.add('is-flash'); el.querySelector('.save-text').innerText = '已儲存'; });
+            clearTimeout(saveFlashTimer);
+            saveFlashTimer = setTimeout(() => document.querySelectorAll('.save-indicator').forEach(el => { el.classList.remove('is-flash'); el.querySelector('.save-text').innerText = '存在這台電腦'; }), 900);
+        }
+        function commit() { save(); renderClass(); }
+
+        // 請瀏覽器把資料標為「持久保存」，降低空間不足時被自動清掉的機會
+        if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
+        // 同時開了兩個分頁時，另一頁的修改同步過來
+        window.addEventListener('storage', e => { if (e.key === STORE_KEY) { state = loadState(); route(); } });
+
+        // ===== 小工具 =====
+        function getLocalDateString() { const now = new Date(); return new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().split('T')[0]; }
+        function fmtMD(d) { return d ? `${parseInt(d.slice(5, 7))}/${parseInt(d.slice(8, 10))}` : ''; }
+        function newId() { return 't' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
+        function hasAnyData() { return CLASSES.some(c => { const cl = state.classes[c]; return cl.tasks.length || Object.keys(cl.historyAtt).length || Object.keys(cl.dailyNotes).length; }); }
+        function daysSinceBackup() { return state.lastBackupAt ? Math.floor((Date.now() - state.lastBackupAt) / DAY_MS) : null; }
+
+        function changeZoom(val) { document.documentElement.style.setProperty('--zoom', val); try { localStorage.setItem(ZOOM_KEY, val); } catch (e) {} }
+        try { const z = localStorage.getItem(ZOOM_KEY); if (z) { $('uiZoom').value = z; changeZoom(z); } } catch (e) {}
+
+        // ===== 畫面切換（網址 #三忠 對應班級，重新整理與上一頁都會回到正確畫面） =====
+        let currentClass = null; let currentTab = 'task';
+        let isHidePerfect = false; let manuallyHiddenTaskStudents = new Set();
+        const cls = () => state.classes[currentClass];
+        const getCount = () => (currentClass && cls().studentCount) || 0;
+
+        function goClass(c) { location.hash = encodeURIComponent(c); }
+        function goHome() { location.hash = ''; }
+        function route() {
+            let c = ''; try { c = decodeURIComponent(location.hash.slice(1)); } catch (e) {}
+            if (CLASSES.includes(c)) openClass(c); else showPicker();
+        }
+        window.addEventListener('hashchange', route);
+
+        function showPicker() {
+            currentClass = null;
+            $('classScreen').classList.add('hidden'); $('pickerScreen').classList.remove('hidden');
+            document.title = '科任作業登記';
+            renderPicker(); renderNotice();
+        }
+        function openClass(c) {
+            if (currentClass !== c) { manuallyHiddenTaskStudents.clear(); }
+            currentClass = c;
+            if (state.lastClass !== c) { state.lastClass = c; save(); }
+            $('pickerScreen').classList.add('hidden'); $('classScreen').classList.remove('hidden');
+            document.title = `${c}・科任作業登記`;
+            renderClass(); renderNotice();
+        }
+
+        // ===== 選班畫面 =====
+        function classSummary(c) {
+            const cl = state.classes[c]; const n = cl.studentCount || 0;
+            let pending = 0;
+            for (let i = 1; i <= n; i++) { if (cl.tasks.some(t => { const s = (cl.taskData[i] || {})[t.id] || 0; return s === 0 || s === 1; })) pending++; }
+            const latest = cl.tasks.length ? cl.tasks.reduce((a, b) => ((b.date || '') >= (a.date || '') ? b : a)) : null;
+            return { n, pending, latest, taskCount: cl.tasks.length, isNew: !cl.studentCount };
+        }
+        function renderPicker() {
+            $('subjectInput').value = state.subject;
+            $('classGrid').innerHTML = CLASSES.map(c => {
+                const s = classSummary(c); const isLast = state.lastClass === c;
+                let latest, foot;
+                if (s.isNew) { latest = '<span class="text-[var(--ink-3)]">尚未設定人數</span>'; foot = `<span class="tile-meta flex items-center gap-1">${ic('plus', '!w-3.5 !h-3.5')}點一下開始</span>`; }
+                else {
+                    latest = s.latest ? `最新：${escapeHtml(s.latest.name)}${s.latest.date ? `<small class="tnum">${fmtMD(s.latest.date)}</small>` : ''}` : '<span class="text-[var(--ink-3)]">還沒有作業</span>';
+                    const chip = !s.taskCount ? '' : s.pending ? `<span class="chip chip-missing">待處理 <span class="tnum">${s.pending}</span> 人</span>` : `<span class="chip chip-done">${ic('check', '!w-3 !h-3')}全員交齊</span>`;
+                    foot = `<span class="tile-meta tnum">${s.n} 人・${s.taskCount} 項作業</span>${chip}`;
+                }
+                return `<button onclick="goClass('${c}')" class="class-tile ${isLast ? 'is-last' : ''} ${s.isNew ? 'is-new' : ''}">${isLast ? '<span class="tile-tag">上次使用</span>' : ''}<span class="tile-name">${c}</span><span class="tile-latest">${latest}</span><span class="tile-foot">${foot}</span></button>`;
+            }).join('');
+            const d = daysSinceBackup();
+            $('backupStatusLine').querySelector('span').innerText = d === null ? '尚未下載過備份。建議每週備份一次，換電腦時也能用「從備份還原」帶走資料。' : `上次備份：${d === 0 ? '今天' : `${d} 天前`}。`;
+        }
+        function updateSubject(v) { state.subject = v.trim(); save(); }
+
+        // ===== 提醒條 =====
+        function renderNotice() {
+            const bar = $('noticeBar'); const text = $('noticeText'); const d = daysSinceBackup();
+            let msg = null; let danger = false;
+            if (!storageOk || storageWriteFailed) { danger = true; msg = !storageOk ? '這個瀏覽器不允許儲存資料（可能是無痕模式），關掉視窗後登記的內容會消失。請改用一般視窗開啟，或隨時下載備份。' : '儲存失敗：瀏覽器空間不足或被封鎖，剛剛的修改可能沒有存下來。請立刻下載備份。'; }
+            else if (hasAnyData() && (d === null || d >= BACKUP_REMIND_DAYS)) { msg = `${d === null ? '還沒有備份過' : `已經 ${d} 天沒有備份`}。資料只存在這台電腦的瀏覽器，清除瀏覽紀錄或換電腦就會不見。`; }
+            bar.classList.toggle('hidden', !msg); bar.classList.toggle('flex', !!msg); bar.classList.toggle('is-danger', danger);
+            if (msg) text.innerText = msg;
+        }
+
+        // ===== 班級畫面 =====
+        function renderClassSwitch() {
+            $('classSwitch').innerHTML = CLASSES.map(c => `<button onclick="goClass('${c}')" class="${c === currentClass ? 'is-active' : ''}" ${c === currentClass ? 'aria-current="page"' : ''}>${c}</button>`).join('');
+        }
+        function stepSetupCount(d) { const el = $('setupCount'); el.value = Math.min(MAX_STUDENTS, Math.max(1, (parseInt(el.value) || 0) + d)); }
+        function confirmSetup() {
+            const n = parseInt($('setupCount').value);
+            if (!(n >= 1 && n <= MAX_STUDENTS)) { alert(`請輸入 1 到 ${MAX_STUDENTS} 之間的人數。`); return $('setupCount').focus(); }
+            cls().studentCount = n; commit(); $('itemName').focus();
+        }
+        function setCount(v) {
+            const n = parseInt(v);
+            if (!(n >= 1 && n <= MAX_STUDENTS)) { $('studentCount').value = cls().studentCount; return alert(`人數需在 1 到 ${MAX_STUDENTS} 之間。`); }
+            // 減少人數只是不顯示後面的座號，資料仍保留，加回來就會出現
+            cls().studentCount = n; commit();
+        }
+        function stepCount(d) { setCount((cls().studentCount || 0) + d); }
+
+        let taskSortable = null;
+        function initSortable() {
+            if (taskSortable) { taskSortable.destroy(); taskSortable = null; }
+            if (typeof Sortable === 'undefined' || !cls().tasks.length) return;
+            taskSortable = new Sortable($('taskBody'), { animation: 200, handle: '.drag-handle', filter: 'button, .state-btn, input', preventOnFilter: false, delay: 150, delayOnTouchOnly: true, ghostClass: 'sortable-ghost', onEnd: evt => { if (evt.oldIndex === evt.newIndex) return; const t = cls().tasks; t.splice(evt.newIndex, 0, t.splice(evt.oldIndex, 1)[0]); commit(); } });
+        }
+
+        function switchTab(tab) {
+            currentTab = tab;
+            $('btnTaskTab').className = `tab-btn ${tab === 'task' ? 'tab-active' : 'tab-inactive'}`;
+            $('btnAttTab').className = `tab-btn ${tab === 'att' ? 'tab-active' : 'tab-inactive'}`;
+            renderClass();
+        }
+        function toggleHidePerfect() { isHidePerfect = !isHidePerfect; const btn = $('btnHidePerfect'); $('btnHidePerfectText').innerText = isHidePerfect ? '顯示全班' : '隱藏全過關'; btn.querySelector('use').setAttribute('href', isHidePerfect ? '#i-eye' : '#i-eye-off'); btn.classList.toggle('btn-toggled', isHidePerfect); btn.classList.toggle('btn-quiet', !isHidePerfect); btn.setAttribute('aria-pressed', isHidePerfect); renderClass(); }
+        function hideStudentTask(id) { manuallyHiddenTaskStudents.add(id); renderClass(); }
+        function showAllHiddenTaskStudents() { manuallyHiddenTaskStudents.clear(); renderClass(); }
+
+        let isReportOpen = true;
+        function toggleReport() { const panel = $('reportPanel'); isReportOpen = !isReportOpen; panel.classList.toggle('report-open', isReportOpen); panel.classList.toggle('report-closed', !isReportOpen); $('reportGrid').style.opacity = isReportOpen ? '1' : '0'; $('reportToggleIcon').style.transform = isReportOpen ? '' : 'rotate(180deg)'; $('reportToggleText').innerText = isReportOpen ? '收起總覽面板' : '展開總覽面板'; }
+        if (window.innerHeight < 500 && window.innerWidth > window.innerHeight) toggleReport();
+
+        const taskStatus = (sid, task) => ((cls().taskData[sid] || {})[task.id]) || 0;
+
+        function renderClass() {
+            if (!currentClass) return;
+            const cl = cls();
+            $('classTitle').innerText = currentClass;
+            $('subjectTag').innerText = state.subject;
+            renderClassSwitch();
+
+            const isNew = !cl.studentCount;
+            $('setupPanel').classList.toggle('hidden', !isNew);
+            $('classWork').classList.toggle('hidden', isNew); $('classWork').classList.toggle('flex', !isNew);
+            $('btnExport').disabled = isNew;
+            if (isNew) { $('setupClassName').innerText = currentClass; $('setupCount').value = 25; setTimeout(() => $('setupCount').select(), 0); return; }
+
+            const count = cl.studentCount; const date = $('currentDate').value;
+            $('studentCount').value = count;
+            const todaysAtt = cl.historyAtt[date] || {};
+            const isTask = currentTab === 'task';
+            $('taskView').classList.toggle('hidden', !isTask); $('attView').classList.toggle('hidden', isTask);
+            $('btnReminder').classList.toggle('hidden', !isTask); $('btnPrintChecklist').classList.toggle('hidden', !isTask);
+            $('addTaskGroup').classList.toggle('hidden', !isTask); $('btnHidePerfect').classList.toggle('hidden', !isTask);
+            $('taskLegend').classList.toggle('lg:flex', isTask);
+
+            const imperfect = new Set();
+            for (let i = 1; i <= count; i++) if (cl.tasks.some(t => taskStatus(i, t) !== 2)) imperfect.add(i);
+            // 學生不再是「全部完成」（例如新增了作業）時，自動移出手動隱藏名單
+            Array.from(manuallyHiddenTaskStudents).forEach(sid => { if (imperfect.has(sid) || sid > count) manuallyHiddenTaskStudents.delete(sid); });
+            $('hiddenStudentCount').innerText = manuallyHiddenTaskStudents.size;
+            $('btnShowHiddenStudents').classList.toggle('hidden', !isTask || manuallyHiddenTaskStudents.size === 0);
+
+            const visible = [];
+            for (let i = 1; i <= count; i++) { if (isTask && ((isHidePerfect && !imperfect.has(i)) || manuallyHiddenTaskStudents.has(i))) continue; visible.push(i); }
+
+            // 作業表
+            const head = visible.map(i => {
+                const hideBtn = (isTask && cl.tasks.length && !imperfect.has(i)) ? `<button onclick="hideStudentTask(${i})" class="mx-auto mt-1 flex items-center gap-0.5 text-[11px] leading-none font-black text-[var(--st-done-ink)] bg-[var(--st-done-bg)] hover:brightness-95 px-1.5 py-1 rounded-md" title="此生作業已全部完成，點擊暫時隱藏">${ic('check', '!w-3 !h-3')}隱藏</button>` : '';
+                return `<th class="sticky-top student-th text-center font-black align-top">${i}號${hideBtn}</th>`;
+            }).join('');
+            $('taskHeader').innerHTML = `<tr><th class="sticky-cross task-name-cell text-left pl-5 text-base">作業名稱</th>${head}</tr>`;
+            if (!cl.tasks.length) {
+                $('taskBody').innerHTML = `<tr><td colspan="${visible.length + 1}" class="p-10 text-left"><div class="max-w-md"><div class="text-xl font-black text-[var(--ink)]">${currentClass}還沒有作業</div><p class="mt-2 font-bold text-[var(--ink-3)] leading-relaxed">在右上方輸入作業名稱（例如「第三課習作」）後按「新增」。全班預設為「未交」，點學生的按鈕就能依序切換成批改中、待訂、完成。</p></div></td></tr>`;
+            } else {
+                $('taskBody').innerHTML = cl.tasks.map((t, idx) => {
+                    const name = escapeHtml(t.name);
+                    const dateStr = t.date ? `<div class="text-xs font-bold text-[var(--ink-3)] mt-1 tnum">${fmtMD(t.date)} 指派</div>` : '';
+                    let row = `<tr><td class="sticky-left task-name-cell px-3 py-3 border-b"><div class="flex items-start gap-1.5"><span class="drag-handle mt-0.5" title="拖曳排序">${ic('grip')}</span><div class="min-w-0 flex-1"><div class="font-black text-[var(--ink)] text-base md:text-lg leading-snug break-words">${name}</div>${dateStr}<div class="flex gap-1.5 mt-2"><button onclick="completeAllTask(${idx})" class="btn btn-quiet btn-sm">${ic('check')}全完成</button><button onclick="renameTask(${idx})" class="btn btn-quiet btn-sm btn-icon" title="改名" aria-label="改名：${name}">${ic('pencil')}</button><button onclick="deleteTask(${idx})" class="btn btn-danger-quiet btn-sm btn-icon" title="刪除此作業" aria-label="刪除：${name}">${ic('x')}</button></div></div></div></td>`;
+                    visible.forEach(i => { const s = taskStatus(i, t); row += `<td class="p-1.5 md:p-2 border-b"><button onclick="cycleTask(${i},${idx})" class="state-btn task-${s}" aria-label="${i}號 ${name}：${TASK_LABELS[s]}"><span class="btn-idx">${i}</span><span class="btn-text">${TASK_LABELS[s]}</span></button></td>`; });
+                    return row + '</tr>';
+                }).join('');
+            }
+
+            // 出缺勤
+            const allSeats = []; for (let i = 1; i <= count; i++) allSeats.push(i);
+            $('attHeader').innerHTML = `<tr><th class="sticky-cross task-name-cell text-left pl-5 text-base">出勤項目</th>${allSeats.map(i => `<th class="sticky-top student-th text-center font-black">${i}號</th>`).join('')}</tr>`;
+            $('attendanceBody').innerHTML = `<tr><td class="sticky-left task-name-cell px-5 py-4 border-b"><div class="font-black text-[var(--ink)] text-base md:text-lg tnum">${fmtMD(date)} 狀態</div><div class="text-xs font-bold text-[var(--ink-3)] mt-1">點按鈕依序切換假別</div></td>${allSeats.map(i => { const s = todaysAtt[i] || 0; return `<td class="p-1.5 md:p-2 border-b"><button onclick="cycleAttendance(${i})" class="state-btn att-${s}" aria-label="${i}號：${attLabels[s]}"><span class="btn-idx">${i}</span><span class="btn-text">${attLabels[s]}</span></button></td>`; }).join('')}</tr>`;
+
+            // 總覽
+            $('taskReport').innerHTML = cl.tasks.map(t => {
+                const missing = [], fix = [], grading = [];
+                for (let i = 1; i <= count; i++) { const s = taskStatus(i, t); if (s === 0) missing.push(i); else if (s === 1) fix.push(i); else if (s === 3) grading.push(i); }
+                const name = escapeHtml(t.name);
+                if (!missing.length && !fix.length) return `<div class="report-item flex items-center gap-2 flex-wrap"><span class="font-black text-[var(--ink-2)]">${name}</span><span class="chip chip-done">${ic('check', '!w-3 !h-3')}全員交齊</span>${grading.length ? `<span class="chip chip-grading">批改中 ${grading.length} 人</span>` : ''}</div>`;
+                let h = `<div class="report-item"><div class="text-[var(--ink)] font-black text-base">${name}</div>`;
+                if (missing.length) h += `<div class="report-row"><span class="chip chip-missing">未交 ${missing.length}</span><span class="font-black tnum">${missing.join('、')} 號</span></div>`;
+                if (fix.length) h += `<div class="report-row"><span class="chip chip-fix">待訂 ${fix.length}</span><span class="font-black tnum">${fix.join('、')} 號</span></div>`;
+                if (grading.length) h += `<div class="report-row"><span class="chip chip-grading">批改中 ${grading.length}</span><span class="font-bold text-[var(--ink-2)] tnum">${grading.join('、')} 號</span></div>`;
+                return h + '</div>';
+            }).join('') || `<div class="text-[var(--ink-3)] font-bold py-2">還沒有作業。</div>`;
+            const atts = []; for (let i = 1; i <= count; i++) if (todaysAtt[i] > 0) atts.push(`<span class="state-btn att-${todaysAtt[i]} !w-auto !h-auto !min-w-0 !text-sm px-3 py-1.5 !rounded-lg pointer-events-none"><span class="tnum">${i} 號</span><span class="ml-1.5">${attLabels[todaysAtt[i]]}</span></span>`);
+            $('attReport').innerHTML = atts.length ? atts.join(' ') : '<span class="text-[var(--ink-3)] font-bold">這天全員出席。</span>';
+
+            initSortable();
+        }
+
+        // ===== 作業操作 =====
+        function addTask() {
+            const input = $('itemName'); const val = input.value.trim(); if (!val) return input.focus();
+            const cl = cls();
+            if (cl.tasks.some(t => t.name === val)) { alert(`${currentClass}已經有「${val}」這項作業了。`); return input.select(); }
+            cl.tasks.push({ id: newId(), name: val, date: $('currentDate').value || getLocalDateString() });
+            input.value = ''; commit(); input.focus();
+            const sc = $('taskView'); sc.scrollTop = sc.scrollHeight;
+        }
+        function renameTask(idx) {
+            const cl = cls(); const t = cl.tasks[idx]; let name = prompt('請輸入新的作業名稱：', t.name); if (name === null) return;
+            name = name.trim(); if (!name) return alert('名稱不可為空！'); if (name === t.name) return;
+            if (cl.tasks.some((x, i) => i !== idx && x.name === name)) return alert('名稱已存在！');
+            t.name = name; commit();
+        }
+        function deleteTask(idx) {
+            const cl = cls(); const t = cl.tasks[idx];
+            if (!confirm(`確定刪除${currentClass}的「${t.name}」？這項作業的全班繳交紀錄也會一起刪除。`)) return;
+            cl.tasks.splice(idx, 1); for (const sid in cl.taskData) delete cl.taskData[sid][t.id]; commit();
+        }
+        function cycleTask(sid, idx) { const cl = cls(); const t = cl.tasks[idx]; if (!cl.taskData[sid]) cl.taskData[sid] = {}; cl.taskData[sid][t.id] = TASK_NEXT[cl.taskData[sid][t.id] || 0]; commit(); }
+        function completeAllTask(idx) {
+            const cl = cls(); const t = cl.tasks[idx]; if (!confirm(`確定將「${t.name}」設為全班完成？`)) return;
+            for (let i = 1; i <= cl.studentCount; i++) { if (!cl.taskData[i]) cl.taskData[i] = {}; cl.taskData[i][t.id] = 2; } commit();
+        }
+        function cycleAttendance(sid) { const cl = cls(); const d = $('currentDate').value; if (!cl.historyAtt[d]) cl.historyAtt[d] = {}; const next = ((cl.historyAtt[d][sid] || 0) + 1) % attLabels.length; if (next) cl.historyAtt[d][sid] = next; else delete cl.historyAtt[d][sid]; if (!Object.keys(cl.historyAtt[d]).length) delete cl.historyAtt[d]; commit(); }
+
+        // ===== 彈窗 =====
+        function openModal(id) { $(id).classList.replace('hidden', 'flex'); }
+        function closeModal(id) { $(id).classList.replace('flex', 'hidden'); }
+        document.addEventListener('keydown', e => { if (e.key !== 'Escape') return; const open = [...document.querySelectorAll('.modal.flex')].pop(); if (open) { if (open.id === 'restoreModal') closeRestoreModal(); else closeModal(open.id); } });
+
+        function openNoteModal() { const d = $('currentDate').value; $('noteClassName').innerText = currentClass; $('noteDateDisplay').innerText = d; $('dailyNoteText').value = cls().dailyNotes[d] || ''; openModal('noteModal'); $('dailyNoteText').focus(); }
+        function saveAndCloseNote() { const d = $('currentDate').value; const text = $('dailyNoteText').value.trim(); if (text) cls().dailyNotes[d] = text; else delete cls().dailyNotes[d]; save(); closeModal('noteModal'); renderNotice(); }
+
+        // 繳交提醒
+        function getIncompleteTasksForStudent(sid) { const missing = [], correction = []; cls().tasks.forEach(t => { const s = taskStatus(sid, t); if (s === 0) missing.push(t.name); else if (s === 1) correction.push(t.name); }); return { missing, correction }; }
+        function buildReminderMessage(sid) {
+            const { missing, correction } = getIncompleteTasksForStudent(sid);
+            if (!missing.length && !correction.length) return '';
+            const who = state.subject ? `${state.subject}老師` : '老師';
+            const lines = [`${currentClass} ${sid}號家長您好😊`, '', `我是${who}，想跟您說一下，孩子目前還有幾項作業需要協助關心，麻煩您在家提醒孩子盡快完成，謝謝您的配合🙏`];
+            if (missing.length) { lines.push('', '【尚未繳交】'); missing.forEach(t => lines.push(`．${t}`)); }
+            if (correction.length) { lines.push('', '【需要訂正】'); correction.forEach(t => lines.push(`．${t}`)); }
+            lines.push('', '若孩子有任何狀況，也歡迎隨時與老師聯繫，謝謝您的用心😊');
+            return lines.join('\n');
+        }
+        function openReminderModal() {
+            const count = getCount(); let html = ''; let first = null;
+            for (let i = 1; i <= count; i++) { const { missing, correction } = getIncompleteTasksForStudent(i); const n = missing.length + correction.length; if (n && first === null) first = i; html += `<option value="${i}">${i}號 ${n ? `（未完成 ${n} 項）` : '（已全部完成）'}</option>`; }
+            const sel = $('reminderStudentSelect'); sel.innerHTML = html; sel.value = first !== null ? first : 1;
+            updateReminderPreview(); openModal('reminderModal');
+        }
+        function updateReminderPreview() {
+            const msg = buildReminderMessage(parseInt($('reminderStudentSelect').value));
+            $('reminderTextarea').classList.toggle('hidden', !msg); $('reminderEmptyState').classList.toggle('hidden', !!msg);
+            $('btnSendLine').disabled = !msg; $('btnCopyReminder').disabled = !msg;
+            if (msg) $('reminderTextarea').value = msg;
+        }
+        function copyReminderText() {
+            const ta = $('reminderTextarea'); if (ta.classList.contains('hidden') || !ta.value) return;
+            const label = $('btnCopyReminder').querySelector('span');
+            const done = () => { label.innerText = '已複製'; setTimeout(() => label.innerText = '複製文字', 1500); };
+            (navigator.clipboard ? navigator.clipboard.writeText(ta.value) : Promise.reject()).then(done).catch(() => { ta.select(); document.execCommand('copy'); done(); });
+        }
+        function sendReminderLine() { const ta = $('reminderTextarea'); if (ta.classList.contains('hidden') || !ta.value) return; window.open(`https://line.me/R/msg/text/?${encodeURIComponent(ta.value)}`, '_blank'); }
+
+        // 列印缺交檢核表
+        function getPrintChecklistStudents() {
+            const incMissing = $('printIncludeMissing').checked; const incFix = $('printIncludeFix').checked; const list = [];
+            for (let i = 1; i <= getCount(); i++) {
+                const items = []; cls().tasks.forEach(t => { const st = taskStatus(i, t); if ((st === 0 && incMissing) || (st === 1 && incFix)) items.push({ name: t.name, status: st, date: t.date }); });
+                if (items.length) list.push({ sid: i, items });
+            }
+            return list;
+        }
+        function updatePrintSummary() {
+            const list = getPrintChecklistStudents(); const pages = list.length ? Math.ceil(buildPrintCards(list, '').length / 4) : 0;
+            $('printSummary').innerHTML = list.length ? `將列印${currentClass} <span class="tnum">${list.length}</span> 位學生，共 <span class="tnum">${pages}</span> 張 A4` : '<span class="text-[var(--ink-3)]">目前沒有符合條件的學生，不需要列印。</span>';
+            $('btnRunPrint').disabled = !list.length;
+        }
+        function openPrintModal() { updatePrintSummary(); openModal('printModal'); }
+        const PRINT_LEVELS = ['', 'is-dense', 'is-dense is-two-col', 'is-dense is-two-col is-tiny'];
+        function printCardHtml(sid, items, level, opts) {
+            const rows = items.map(it => `<div class="print-item"><span class="print-box"></span><span class="print-name">${escapeHtml(it.name)}</span>${it.date ? `<span class="print-date">${fmtMD(it.date)}</span>` : ''}<span class="print-status ${it.status === 1 ? 'is-fix' : ''}">${it.status === 1 ? '待訂正' : '未交'}</span></div>`).join('');
+            const foot = `共 ${opts.total} 項${opts.hasMore ? '，接續下一張' : '，完成後請在方格打勾'}。`;
+            const title = `${state.subject ? escapeHtml(state.subject) : ''}作業補交檢核表`;
+            return `<section class="print-card"><div class="print-card-head"><div class="print-seat">${currentClass} ${sid} 號${opts.isCont ? '<small>（續）</small>' : ''}</div><div><div class="print-title">${title}</div><div class="print-meta">列印日期 ${opts.today}</div></div></div><div class="print-list-head"><span class="col-check">完成</span><span>作業名稱</span><span style="margin-left:auto">指派日・狀態</span></div><div class="print-list ${level}">${rows}</div><div class="print-foot">${foot}</div></section>`;
+        }
+        // 每位學生一格；依序嘗試較小的字級／雙欄，仍放不下時把剩下的項目接到下一格
+        function buildPrintCards(list, today) {
+            const meas = document.createElement('div'); meas.style.cssText = 'position:absolute;left:-10000px;top:0;visibility:hidden;'; document.body.appendChild(meas);
+            const fits = html => { meas.innerHTML = `<div class="print-page">${html}</div>`; const el = meas.querySelector('.print-list'); return el.scrollHeight <= el.clientHeight + 1 && el.scrollWidth <= el.clientWidth + 1; };
+            const cards = [];
+            list.forEach(({ sid, items }) => {
+                let rest = items; let isCont = false;
+                while (rest.length) {
+                    let html = null;
+                    for (const level of PRINT_LEVELS) { const h = printCardHtml(sid, rest, level, { total: items.length, isCont, hasMore: false, today }); if (fits(h)) { html = h; break; } }
+                    if (html) { cards.push(html); break; }
+                    const tiny = PRINT_LEVELS[PRINT_LEVELS.length - 1]; let k = rest.length - 1;
+                    while (k > 1 && !fits(printCardHtml(sid, rest.slice(0, k), tiny, { total: items.length, isCont, hasMore: true, today }))) k--;
+                    cards.push(printCardHtml(sid, rest.slice(0, k), tiny, { total: items.length, isCont, hasMore: true, today }));
+                    rest = rest.slice(k); isCont = true;
+                }
+            });
+            meas.remove();
+            return cards;
+        }
+        function runPrintChecklist() {
+            const list = getPrintChecklistStudents(); if (!list.length) return;
+            const cards = buildPrintCards(list, getLocalDateString().replace(/-/g, '/'));
+            let html = ''; for (let i = 0; i < cards.length; i += 4) html += `<div class="print-page">${cards.slice(i, i + 4).join('')}</div>`;
+            $('printArea').innerHTML = html; closeModal('printModal'); setTimeout(() => window.print(), 50);
+        }
+
+        // ===== 匯出本班 Excel =====
+        function exportExcel() {
+            if (typeof XLSX === 'undefined') return alert('匯出元件載入失敗，請確認網路連線後重新整理頁面。');
+            const cl = cls(); const count = cl.studentCount || 0; const wb = XLSX.utils.book_new();
+            const taskRows = []; const names = cl.tasks.map(t => t.date ? `${t.name}（${fmtMD(t.date)}）` : t.name);
+            for (let i = 1; i <= count; i++) { const row = { '座號': i }; cl.tasks.forEach((t, k) => row[names[k]] = ['未交', '待訂正', '已完成', '批改中'][taskStatus(i, t)]); taskRows.push(row); }
+            XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(taskRows), '作業總表');
+            const dates = Object.keys(cl.historyAtt).sort(); const attRows = [];
+            for (let i = 1; i <= count; i++) { const row = { '座號': i }; const stats = [0, 0, 0, 0, 0, 0]; dates.forEach(d => { const s = cl.historyAtt[d][i] || 0; row[d] = attLabels[s]; stats[s]++; }); attLabels.slice(1).forEach((l, k) => row[`${l}_總計`] = stats[k + 1]); attRows.push(row); }
+            XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(attRows), '出缺勤總表');
+            const noteRows = Object.keys(cl.dailyNotes).sort().map(d => ({ '紀錄日期': d, '記事': cl.dailyNotes[d] }));
+            if (noteRows.length) { const ws = XLSX.utils.json_to_sheet(noteRows); ws['!cols'] = [{ wch: 15 }, { wch: 100 }]; XLSX.utils.book_append_sheet(wb, ws, '記事'); }
+            XLSX.writeFile(wb, `${state.subject || '科任'}_${currentClass}_總表_${getLocalDateString()}.xlsx`);
+        }
+
+        // ===== 備份與還原 =====
+        function downloadJson(data, fileName) {
+            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+            const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = fileName; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+        }
+        function downloadBackup() {
+            downloadJson({ ...state, exportedAt: new Date().toISOString() }, `科任作業備份_${state.subject ? state.subject + '_' : ''}${getLocalDateString()}.json`);
+            state.lastBackupAt = Date.now(); save(); renderNotice(); if (!currentClass) renderPicker();
+        }
+
+        let pendingRestore = null;
+        function pickRestoreFile() { $('restoreFileInput').click(); }
+        function handleRestoreFile(input) {
+            const file = input.files && input.files[0]; input.value = ''; if (!file) return;
+            const reader = new FileReader();
+            reader.onload = () => {
+                let raw; try { raw = JSON.parse(reader.result); } catch (e) { return alert('無法讀取這個檔案：它不是有效的備份檔（JSON）。'); }
+                if (!raw || raw.app !== APP_ID || typeof raw.classes !== 'object') return alert('這不是科任作業登記的備份檔。\n（導師版的備份格式不同，無法在這裡還原。）');
+                pendingRestore = normalizeState(raw);
+                $('restoreFileName').innerText = file.name;
+                const rows = CLASSES.map(c => { const cl = pendingRestore.classes[c]; return [c, cl.studentCount ? `${cl.studentCount} 人・${cl.tasks.length} 項作業` : '尚未設定']; });
+                if (raw.exportedAt) rows.unshift(['備份時間', new Date(raw.exportedAt).toLocaleString('zh-TW', { hour12: false })]);
+                $('restoreSummary').innerHTML = rows.map(([k, v]) => `<dt class="text-[var(--ink-3)] font-bold">${k}</dt><dd class="text-[var(--ink)] font-black tnum">${escapeHtml(v)}</dd>`).join('');
+                $('restoreSafetyNote').classList.toggle('hidden', !hasAnyData());
+                openModal('restoreModal');
+            };
+            reader.onerror = () => alert('讀取檔案失敗，請再試一次。');
+            reader.readAsText(file);
+        }
+        function closeRestoreModal() { pendingRestore = null; closeModal('restoreModal'); }
+        function confirmRestore() {
+            if (!pendingRestore) return;
+            if (hasAnyData()) downloadJson({ ...state, exportedAt: new Date().toISOString() }, `還原前自動備份_${getLocalDateString()}_${new Date().toTimeString().slice(0, 8).replace(/:/g, '')}.json`);
+            state = pendingRestore; state.lastBackupAt = Date.now(); save();
+            closeRestoreModal(); manuallyHiddenTaskStudents.clear(); route();
+            alert('已從備份還原完成。');
+        }
+
+        // ===== 啟動 =====
+        $('currentDate').value = getLocalDateString();
+        route();
+    </script>
+    <div id="printArea" aria-hidden="true"></div>
+</body>
+</html>
