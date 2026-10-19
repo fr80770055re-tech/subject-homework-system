@@ -183,6 +183,33 @@
         tbody tr:hover td { background-color: #f7f2e9; }
         tbody tr:hover td.sticky-left { background-color: var(--surface-2); }
 
+        /* 單項模式：上方選作業，下方全班座號 */
+        .task-picker { position: sticky; top: 0; z-index: 10; display: flex; gap: 0.5rem; overflow-x: auto; padding: 0.75rem 1rem; background: var(--surface-2); border-bottom: 1px solid var(--line); scrollbar-width: thin; }
+        .task-picker.hidden { display: none; }
+        .task-picker::-webkit-scrollbar { height: 8px; }
+        .task-picker::-webkit-scrollbar-thumb { border-width: 2px; }
+        .task-chip { flex-shrink: 0; display: inline-flex; align-items: center; gap: 0.5rem; max-width: 15rem; height: 2.75rem; padding: 0 0.5rem 0 0.9rem; border-radius: 0.8rem; border: 1px solid var(--line); background: var(--surface); color: var(--ink-2); font-weight: 900; font-size: 0.95rem; transition: background-color 0.15s, border-color 0.15s, color 0.15s; }
+        .task-chip:hover { border-color: var(--line-strong); color: var(--ink); background: #fff; }
+        .task-chip.is-active { background: var(--ink); border-color: var(--ink); color: #fff; }
+        .chip-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .chip-count { min-width: 1.6rem; height: 1.6rem; padding: 0 0.45rem; border-radius: 999px; background: var(--st-missing-bg); color: var(--st-missing-ink); font-size: 0.78rem; display: inline-flex; align-items: center; justify-content: center; font-variant-numeric: tabular-nums; }
+        .chip-count.is-done { background: var(--st-done-bg); color: var(--st-done-ink); }
+        .focus-body { padding: 1.1rem 1rem 1.75rem; }
+        @media (min-width: 640px) { .focus-body { padding: 1.25rem 1.5rem 2rem; } }
+        .focus-head { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 0.75rem; }
+        .focus-title { font-size: clamp(1.35rem, 3vw, 1.9rem); font-weight: 900; color: var(--ink); line-height: 1.2; overflow-wrap: anywhere; }
+        .focus-hint { font-size: 0.82rem; font-weight: 700; color: var(--ink-3); margin-top: 0.35rem; }
+        .focus-stats { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0.9rem 0 1rem; }
+        .focus-stats .chip { font-size: 0.82rem; padding: 0.25rem 0.7rem; }
+        .seat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(calc(88px * var(--zoom)), 1fr)); gap: calc(10px * var(--zoom)); }
+        .seat-grid .state-btn { min-width: 0; height: calc(82px * var(--zoom)); flex-direction: column; gap: calc(5px * var(--zoom)); }
+        .seat-num { font-size: calc(1.6rem * var(--zoom)); line-height: 1; font-weight: 900; font-variant-numeric: tabular-nums; }
+        .seat-label { font-size: calc(0.85rem * var(--zoom)); line-height: 1; font-weight: 900; }
+        @media (max-width: 639px) { .seat-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; } .seat-grid .state-btn { height: 74px; border-radius: 14px; } .seat-num { font-size: 1.45rem; } .seat-label { font-size: 0.8rem; } }
+        .view-toggle button { padding: 0.3rem 0.75rem; border-radius: 0.55rem; font-weight: 900; font-size: 0.8rem; color: var(--ink-3); transition: background-color 0.15s, color 0.15s; }
+        .view-toggle button:hover { color: var(--ink); }
+        .view-toggle button.is-active { background: #fff; color: var(--ink); box-shadow: 0 1px 2px rgba(55,45,30,0.12); }
+
         /* 總覽面板 */
         .report-section { border-top: 1px solid var(--line); background: var(--surface-2); padding: 0 16px 14px; flex-shrink: 0; transition: height 0.25s cubic-bezier(0.22, 1, 0.36, 1); display: flex; flex-direction: column; position: relative; }
         .report-open { height: clamp(170px, 28%, 310px); }
@@ -382,10 +409,19 @@
                     </div>
                     <button onclick="showAllHiddenTaskStudents()" id="btnShowHiddenStudents" class="hidden btn btn-toggled btn-sm"><svg class="ic"><use href="#i-eye"/></svg>已隱藏 <span id="hiddenStudentCount" class="tnum">0</span> 位・還原</button>
                     <button onclick="toggleHidePerfect()" id="btnHidePerfect" class="btn btn-quiet btn-sm" aria-pressed="false"><svg class="ic"><use href="#i-eye-off"/></svg><span id="btnHidePerfectText">隱藏全過關</span></button>
+                    <div id="viewToggle" class="view-toggle hidden sm:flex items-center gap-0.5 bg-[var(--surface-3)] p-1 rounded-xl" role="group" aria-label="顯示方式">
+                        <button data-view="focus" onclick="setView('focus')" title="一次看一項作業">單項</button>
+                        <button data-view="matrix" onclick="setView('matrix')" title="所有作業一起列出（適合投影）">總表</button>
+                    </div>
                 </div>
             </div>
 
-            <div id="taskView" class="scroll-section"><table class="w-full"><thead id="taskHeader"></thead><tbody id="taskBody"></tbody></table></div>
+            <div id="focusView" class="scroll-section hidden">
+                <div id="taskPicker" class="task-picker" role="tablist" aria-label="選擇作業"></div>
+                <div id="focusBody" class="focus-body"></div>
+            </div>
+            <div id="attGridView" class="scroll-section hidden"><div id="attGridBody" class="focus-body"></div></div>
+            <div id="taskView" class="scroll-section hidden"><table class="w-full"><thead id="taskHeader"></thead><tbody id="taskBody"></tbody></table></div>
             <div id="attView" class="scroll-section hidden"><table class="w-full"><thead id="attHeader"></thead><tbody id="attendanceBody"></tbody></table></div>
 
             <div id="reportPanel" class="report-section sm:rounded-b-[1.5rem] report-open">
@@ -641,13 +677,32 @@
             $('btnAttTab').className = `tab-btn ${tab === 'att' ? 'tab-active' : 'tab-inactive'}`;
             renderClass();
         }
-        function toggleHidePerfect() { isHidePerfect = !isHidePerfect; const btn = $('btnHidePerfect'); $('btnHidePerfectText').innerText = isHidePerfect ? '顯示全班' : '隱藏全過關'; btn.querySelector('use').setAttribute('href', isHidePerfect ? '#i-eye' : '#i-eye-off'); btn.classList.toggle('btn-toggled', isHidePerfect); btn.classList.toggle('btn-quiet', !isHidePerfect); btn.setAttribute('aria-pressed', isHidePerfect); renderClass(); }
+        function toggleHidePerfect() { isHidePerfect = !isHidePerfect; const btn = $('btnHidePerfect'); btn.querySelector('use').setAttribute('href', isHidePerfect ? '#i-eye' : '#i-eye-off'); btn.classList.toggle('btn-toggled', isHidePerfect); btn.classList.toggle('btn-quiet', !isHidePerfect); btn.setAttribute('aria-pressed', isHidePerfect); renderClass(); }
         function hideStudentTask(id) { manuallyHiddenTaskStudents.add(id); renderClass(); }
         function showAllHiddenTaskStudents() { manuallyHiddenTaskStudents.clear(); renderClass(); }
 
+        // 顯示方式：「單項」上方選一項作業、下方只列該作業的全班狀態；「總表」為所有作業的矩陣（手機一律用單項）
+        const VIEW_KEY = 'subjectHomework.view';
+        const mqPhone = window.matchMedia('(max-width: 639px)');
+        let viewPref = 'focus'; try { if (localStorage.getItem(VIEW_KEY) === 'matrix') viewPref = 'matrix'; } catch (e) {}
+        const viewMode = () => mqPhone.matches ? 'focus' : viewPref;
+        function setView(v) { viewPref = v; try { localStorage.setItem(VIEW_KEY, v); } catch (e) {} renderClass(); }
+        mqPhone.addEventListener('change', () => renderClass());
+
+        const selectedTask = {}; // 班級 → 目前選取的作業 id（預設為最新新增的一項）
+        function getSelectedTask() {
+            const tasks = cls().tasks; if (!tasks.length) return null;
+            let t = tasks.find(x => x.id === selectedTask[currentClass]);
+            if (!t) { t = tasks[tasks.length - 1]; selectedTask[currentClass] = t.id; }
+            return t;
+        }
+        function selectTask(id) { selectedTask[currentClass] = id; renderClass(); revealActiveChip(); $('focusView').scrollTop = 0; }
+        function revealActiveChip() { const a = $('taskPicker').querySelector('.is-active'); if (a) a.scrollIntoView({ inline: 'nearest', block: 'nearest' }); }
+
         let isReportOpen = true;
         function toggleReport() { const panel = $('reportPanel'); isReportOpen = !isReportOpen; panel.classList.toggle('report-open', isReportOpen); panel.classList.toggle('report-closed', !isReportOpen); $('reportGrid').style.opacity = isReportOpen ? '1' : '0'; $('reportToggleIcon').style.transform = isReportOpen ? '' : 'rotate(180deg)'; $('reportToggleText').innerText = isReportOpen ? '收起總覽面板' : '展開總覽面板'; }
-        if (window.innerHeight < 500 && window.innerWidth > window.innerHeight) toggleReport();
+        // 手機與橫向矮螢幕預設收起總覽，把空間留給座號按鈕
+        if (mqPhone.matches || (window.innerHeight < 500 && window.innerWidth > window.innerHeight)) toggleReport();
 
         const taskStatus = (sid, task) => ((cls().taskData[sid] || {})[task.id]) || 0;
 
@@ -667,18 +722,22 @@
             const count = cl.studentCount; const date = $('currentDate').value;
             $('studentCount').value = count;
             const todaysAtt = cl.historyAtt[date] || {};
-            const isTask = currentTab === 'task';
-            $('taskView').classList.toggle('hidden', !isTask); $('attView').classList.toggle('hidden', isTask);
+            const isTask = currentTab === 'task'; const focus = viewMode() === 'focus';
+            $('focusView').classList.toggle('hidden', !(isTask && focus)); $('taskView').classList.toggle('hidden', !(isTask && !focus));
+            $('attGridView').classList.toggle('hidden', !(!isTask && focus)); $('attView').classList.toggle('hidden', !(!isTask && !focus));
+            $('viewToggle').querySelectorAll('button').forEach(b => { const on = b.dataset.view === viewPref; b.classList.toggle('is-active', on); b.setAttribute('aria-pressed', on); });
             $('btnReminder').classList.toggle('hidden', !isTask); $('btnPrintChecklist').classList.toggle('hidden', !isTask);
-            $('addTaskGroup').classList.toggle('hidden', !isTask); $('btnHidePerfect').classList.toggle('hidden', !isTask);
-            $('taskLegend').classList.toggle('lg:flex', isTask);
+            $('addTaskGroup').classList.toggle('hidden', !isTask); $('btnHidePerfect').classList.toggle('hidden', !isTask || !cl.tasks.length);
+            $('btnHidePerfectText').innerText = isHidePerfect ? '顯示全班' : (focus ? '隱藏已完成' : '隱藏全過關');
+            $('taskLegend').classList.toggle('lg:flex', isTask && !focus);
 
             const imperfect = new Set();
             for (let i = 1; i <= count; i++) if (cl.tasks.some(t => taskStatus(i, t) !== 2)) imperfect.add(i);
             // 學生不再是「全部完成」（例如新增了作業）時，自動移出手動隱藏名單
             Array.from(manuallyHiddenTaskStudents).forEach(sid => { if (imperfect.has(sid) || sid > count) manuallyHiddenTaskStudents.delete(sid); });
             $('hiddenStudentCount').innerText = manuallyHiddenTaskStudents.size;
-            $('btnShowHiddenStudents').classList.toggle('hidden', !isTask || manuallyHiddenTaskStudents.size === 0);
+            $('btnShowHiddenStudents').classList.toggle('hidden', !isTask || focus || manuallyHiddenTaskStudents.size === 0);
+            renderFocus(cl, count); renderAttGrid(cl, count, date, todaysAtt);
 
             const visible = [];
             for (let i = 1; i <= count; i++) { if (isTask && ((isHidePerfect && !imperfect.has(i)) || manuallyHiddenTaskStudents.has(i))) continue; visible.push(i); }
@@ -724,14 +783,53 @@
             initSortable();
         }
 
+        function renderFocus(cl, count) {
+            const t = getSelectedTask();
+            $('taskPicker').classList.toggle('hidden', !t);
+            if (!t) { $('focusBody').innerHTML = `<div class="max-w-md py-4"><div class="text-xl font-black text-[var(--ink)]">${currentClass}還沒有作業</div><p class="mt-2 font-bold text-[var(--ink-3)] leading-relaxed">在上方輸入作業名稱（例如「第三課習作」）後按「新增」。全班預設為「未交」，點座號就能依序切換成批改中、待訂、完成。</p></div>`; return; }
+
+            $('taskPicker').innerHTML = cl.tasks.map(x => {
+                let pending = 0; for (let i = 1; i <= count; i++) { const s = taskStatus(i, x); if (s === 0 || s === 1) pending++; }
+                const on = x.id === t.id;
+                return `<button role="tab" aria-selected="${on}" onclick="selectTask('${x.id}')" class="task-chip ${on ? 'is-active' : ''}" title="${escapeHtml(x.name)}"><span class="chip-name">${escapeHtml(x.name)}</span><span class="chip-count ${pending ? '' : 'is-done'}" aria-label="${pending ? `${pending} 人未完成` : '全員交齊'}">${pending || ic('check', '!w-3.5 !h-3.5')}</span></button>`;
+            }).join('');
+
+            const idx = cl.tasks.indexOf(t); const name = escapeHtml(t.name);
+            const n = { 0: 0, 1: 0, 2: 0, 3: 0 }; let seats = '';
+            for (let i = 1; i <= count; i++) {
+                const s = taskStatus(i, t); n[s]++;
+                if (isHidePerfect && s === 2) continue;
+                seats += `<button onclick="cycleTask(${i},${idx})" class="state-btn task-${s}" aria-label="${i}號：${TASK_LABELS[s]}"><span class="seat-num">${i}</span><span class="seat-label">${TASK_LABELS[s]}</span></button>`;
+            }
+            const stats = [[0, 'chip-missing'], [3, 'chip-grading'], [1, 'chip-fix']].filter(([s]) => n[s]).map(([s, c]) => `<span class="chip ${c}">${TASK_LABELS[s]} <span class="tnum">${n[s]}</span></span>`).join('') + `<span class="chip chip-done">${ic('check', '!w-3 !h-3')}完成 <span class="tnum">${n[2]} / ${count}</span></span>`;
+            $('focusBody').innerHTML = `
+                <div class="focus-head">
+                    <div class="min-w-0 flex-1"><h2 class="focus-title">${name}</h2><div class="focus-hint tnum">${t.date ? `${fmtMD(t.date)} 指派` : ''}<span class="max-sm:hidden">${t.date ? '・' : ''}點座號依序切換：未交 → 批改中 → 待訂 → 完成</span></div></div>
+                    <div class="flex gap-1.5 shrink-0"><button onclick="completeAllTask(${idx})" class="btn btn-quiet btn-sm !h-9">${ic('check')}全完成</button><button onclick="renameTask(${idx})" class="btn btn-quiet btn-sm btn-icon !h-9 !w-9" title="改名" aria-label="改名：${name}">${ic('pencil')}</button><button onclick="deleteTask(${idx})" class="btn btn-danger-quiet btn-sm btn-icon !h-9 !w-9" title="刪除此作業" aria-label="刪除：${name}">${ic('x')}</button></div>
+                </div>
+                <div class="focus-stats">${stats}</div>
+                ${seats ? `<div class="seat-grid">${seats}</div>` : `<div class="rounded-xl bg-[var(--st-done-bg)] text-[var(--st-done-ink)] font-black text-center py-12">全班都完成了。</div>`}`;
+        }
+
+        function renderAttGrid(cl, count, date, todaysAtt) {
+            let seats = ''; let absent = 0;
+            for (let i = 1; i <= count; i++) { const s = todaysAtt[i] || 0; if (s) absent++; seats += `<button onclick="cycleAttendance(${i})" class="state-btn att-${s}" aria-label="${i}號：${attLabels[s]}"><span class="seat-num">${i}</span><span class="seat-label">${attLabels[s]}</span></button>`; }
+            $('attGridBody').innerHTML = `
+                <div class="focus-head"><div class="min-w-0"><h2 class="focus-title tnum">${fmtMD(date)} 出缺勤</h2><div class="focus-hint max-sm:hidden">點座號依序切換：${attLabels.join(' → ')}</div></div></div>
+                <div class="focus-stats"><span class="chip ${absent ? 'chip-fix' : 'chip-done'}">${absent ? `異動 <span class="tnum">${absent}</span> 人` : '全員出席'}</span></div>
+                <div class="seat-grid">${seats}</div>`;
+        }
+
         // ===== 作業操作 =====
         function addTask() {
             const input = $('itemName'); const val = input.value.trim(); if (!val) return input.focus();
             const cl = cls();
             if (cl.tasks.some(t => t.name === val)) { alert(`${currentClass}已經有「${val}」這項作業了。`); return input.select(); }
-            cl.tasks.push({ id: newId(), name: val, date: $('currentDate').value || getLocalDateString() });
-            input.value = ''; commit(); input.focus();
-            const sc = $('taskView'); sc.scrollTop = sc.scrollHeight;
+            const t = { id: newId(), name: val, date: $('currentDate').value || getLocalDateString() };
+            cl.tasks.push(t); selectedTask[currentClass] = t.id;
+            input.value = ''; commit();
+            if (viewMode() === 'focus') { revealActiveChip(); $('focusView').scrollTop = 0; if (mqPhone.matches) input.blur(); else input.focus(); }
+            else { input.focus(); const sc = $('taskView'); sc.scrollTop = sc.scrollHeight; }
         }
         function renameTask(idx) {
             const cl = cls(); const t = cl.tasks[idx]; let name = prompt('請輸入新的作業名稱：', t.name); if (name === null) return;
